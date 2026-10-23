@@ -2,9 +2,6 @@ provider "aws" {
   region = "eu-north-1"
 }
 
-# ==========================================
-# ЗМІННІ (Беруться з terraform.tfvars)
-# ==========================================
 variable "db_password" {
   description = "Пароль до бази даних"
   type        = string
@@ -17,13 +14,10 @@ variable "alert_email" {
 }
 
 variable "github_repo" {
-  description = "Твій репозиторій на GitHub"
+  description = "Репозиторій на GitHub"
   type        = string
 }
 
-# ==========================================
-# БЮДЖЕТ (Вимога лабораторної)
-# ==========================================
 resource "aws_budgets_budget" "cost_alert" {
   name              = "monthly-budget"
   budget_type       = "COST"
@@ -40,9 +34,6 @@ resource "aws_budgets_budget" "cost_alert" {
   }
 }
 
-# ==========================================
-# 1. РЕПОЗИТОРІЙ ТА МЕРЕЖА
-# ==========================================
 resource "aws_ecr_repository" "api_repo" {
   name                 = "scooter-api-repo"
   image_tag_mutability = "MUTABLE"
@@ -99,9 +90,6 @@ resource "aws_db_subnet_group" "db_subnet_group" {
   subnet_ids = [aws_subnet.private_a.id, aws_subnet.private_b.id]
 }
 
-# ==========================================
-# 2. SECURITY GROUPS
-# ==========================================
 resource "aws_security_group" "alb_sg" {
   name        = "alb_security_group"
   description = "Allow HTTP traffic to ALB"
@@ -154,9 +142,6 @@ resource "aws_security_group" "db_sg" {
   }
 }
 
-# ==========================================
-# 3. БАЗА ДАНИХ (Пароль сховано)
-# ==========================================
 resource "aws_db_instance" "scooter_db" {
   identifier             = "scooter-db"
   engine                 = "postgres"
@@ -172,9 +157,6 @@ resource "aws_db_instance" "scooter_db" {
   vpc_security_group_ids = [aws_security_group.db_sg.id]
 }
 
-# ==========================================
-# 4. РОЛІ ТА ЛОГИ
-# ==========================================
 resource "aws_iam_role" "ecs_execution_role" {
   name = "ecs_execution_role"
   assume_role_policy = jsonencode({
@@ -195,9 +177,6 @@ resource "aws_cloudwatch_log_group" "api_logs" {
   retention_in_days = 1
 }
 
-# ==========================================
-# 5. БАЛАНСУВАЛЬНИК ТРАФІКУ (ALB)
-# ==========================================
 resource "aws_lb" "api_alb" {
   name               = "scooter-api-alb"
   internal           = false
@@ -231,9 +210,6 @@ resource "aws_lb_listener" "api_listener" {
   }
 }
 
-# ==========================================
-# 6. КОНТЕЙНЕР (API)
-# ==========================================
 resource "aws_ecs_cluster" "app_cluster" {
   name = "scooter-cluster"
 }
@@ -288,10 +264,7 @@ resource "aws_ecs_service" "app_service" {
   }
 }
 
-# ==========================================
-# ВИВОДИМО РЕЗУЛЬТАТИ В ТЕРМІНАЛ
-# ==========================================
 output "website_url" {
-  description = "Посилання на твій сайт"
+  description = "Посилання на сайт"
   value       = "http://${aws_lb.api_alb.dns_name}/docs"
 }
