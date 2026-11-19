@@ -190,6 +190,10 @@ resource "aws_lb_target_group" "api_tg" {
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main_vpc.id
   target_type = "ip"
+
+  # Час на дообслуговування активних запитів перед вимкненням інстансу при scale-in
+  deregistration_delay = 30
+
   health_check {
     path                = "/docs"
     protocol            = "HTTP"
@@ -212,6 +216,12 @@ resource "aws_lb_listener" "api_listener" {
 
 resource "aws_ecs_cluster" "app_cluster" {
   name = "scooter-cluster"
+
+  # Потрібно для метрик DesiredTaskCount / RunningTaskCount на дашборді
+  setting {
+    name  = "containerInsights"
+    value = "enabled"
+  }
 }
 resource "aws_ecs_task_definition" "app_task" {
   family                   = "scooter-api-task"
@@ -232,6 +242,18 @@ resource "aws_ecs_task_definition" "app_task" {
       {
         name  = "DATABASE_URL"
         value = "postgresql://postgres:${var.db_password}@${aws_db_instance.scooter_db.endpoint}/postgres"
+      },
+      {
+        name  = "CACHE_ENABLED"
+        value = tostring(var.cache_enabled)
+      },
+      {
+        name  = "CACHE_TTL_SECONDS"
+        value = tostring(var.cache_ttl_seconds)
+      },
+      {
+        name  = "REDIS_URL"
+        value = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:${aws_elasticache_cluster.redis.cache_nodes[0].port}/0"
       }
     ]
     logConfiguration = {
@@ -249,9 +271,17 @@ resource "aws_ecs_service" "app_service" {
   cluster         = aws_ecs_cluster.app_cluster.id
   task_definition = aws_ecs_task_definition.app_task.arn
   launch_type     = "FARGATE"
-  desired_count   = 1
+  desired_count   = var.min_tasks
   depends_on      = [aws_lb_listener.api_listener]
-  
+
+  # Нові інстанси мають встигнути піднятися до першої перевірки здоров'я
+  health_check_grace_period_seconds = 60
+
+  # desired_count тепер керує автоскейлінг; без цього кожен apply скидав би його до min
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
+
   load_balancer {
     target_group_arn = aws_lb_target_group.api_tg.arn
     container_name   = "scooter-api"
